@@ -1,5 +1,10 @@
-# NeoTeX
-Welcome to NeoTeX, the future of scientific typesetting! 
+<p align="center">
+  <img
+    src="https://raw.githubusercontent.com/NeoTeXCore/neotex/main/assets/logo.svg?token=GHSAT0AAAAAACFSFW6IJSPEMVFOLEX5S4VUZIARBNA"
+    alt="neotex logo">
+</p>
+
+Welcome to **NeoTeX**, the future of scientific typesetting! 
 
 While programming languages have continually evolved to become more developer-friendly, 
 the field of scientific writing has lagged behind in terms of user experience. NeoTeX 
