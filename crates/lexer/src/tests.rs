@@ -1,105 +1,108 @@
 use std::fmt::Debug;
 
-use crate::{
-    lexed_str::{LexErrorKind, LexedStr},
-    syntax::SyntaxKind::{self, *},
+use crate::token::{
+    tokenize,
+    TokenKind::{self, *},
 };
 
 #[test]
 fn word() {
     let input: &str = "asdjfqwertzuiopoonmnyxc";
-    let expected = vec![ASCIIWORD, EOF];
+    let expected = vec![AWord];
     check(input, &expected);
 }
 
 #[test]
 fn words() {
-    let input = "asdfäüihnß";
-    let expected = vec![ASCIIWORD, WORD, ASCIIWORD, WORD, EOF];
+    let input = "asdfäüihnß  asdf";
+    let expected = vec![AWord, Word, AWord, Word, Whitespace, AWord];
     check(input, &expected);
 }
 
 #[test]
 fn words_whitespace() {
-    let input = "asdf jhljl";
-    let expected = vec![ASCIIWORD, WHITESPACE, ASCIIWORD, EOF];
+    let input = "as         df jhljl";
+    let expected = vec![AWord, Whitespace, AWord, Whitespace, AWord];
     check(input, &expected);
 }
 
 #[test]
 fn words_newline_single_char() {
     let input: &str = "asdf\njhljl\n";
-    let expected = vec![ASCIIWORD, NEWLINE, ASCIIWORD, NEWLINE, EOF];
+    let expected = vec![AWord, Newline, AWord, Newline];
     check(input, &expected);
 }
 
 #[test]
 fn words_newline_multi_char() {
     let input = "asdf\r\njhljl\n";
-    let expected = vec![ASCIIWORD, NEWLINE, ASCIIWORD, NEWLINE, EOF];
+    let expected = vec![AWord, Newline, AWord, Newline];
     check(input, &expected);
 }
 #[test]
 fn multi_newline() {
     let input = "\n\r\n\n\r\n\n\n";
-    let expected = vec![NEWLINE, EOF];
+    let expected = vec![Newline, Newline, Newline, Newline, Newline, Newline];
     check(input, &expected);
 }
 
 #[test]
 fn comment() {
-    let input = "asdf 98    % asdfl#ü124<ääp\n % kllk";
+    let input = "asdf 98    % asdfl#ü124<ääp\n % kllk \r\n%";
     let expected = vec![
-        ASCIIWORD, WHITESPACE, NUMBER, NUMBER, WHITESPACE, COMMENT, WHITESPACE, COMMENT, EOF,
+        AWord, Whitespace, Number, Whitespace, Comment, Whitespace, Comment, Comment,
     ];
     check(input, &expected);
 }
 
 #[test]
-fn command() {
+fn command_1() {
+    let input = "\\0\\+ \\asdf";
+    let expected = vec![
+        CommandIdent,
+        Number,
+        CommandIdent,
+        Plus,
+        Whitespace,
+        CommandIdent,
+        AWord,
+    ];
+    check(input, &expected);
+}
+
+#[test]
+fn command_2() {
     let input = "\\\\\\0 \\+ \\asdf";
     let expected = vec![
-        COMMAND, COMMAND, WHITESPACE, COMMAND, WHITESPACE, COMMAND, EOF,
+        CommandIdent,
+        CommandIdent,
+        CommandIdent,
+        Number,
+        Whitespace,
+        CommandIdent,
+        Plus,
+        Whitespace,
+        CommandIdent,
+        AWord,
     ];
     check(input, &expected);
 }
 
-#[test]
-fn command_err() {
-    let input = "\\ä \\";
-    let expected = vec![UNKNOWN, WHITESPACE, UNKNOWN, EOF];
-    let err = vec![
-        LexErrorKind::InvalidCommandName,
-        LexErrorKind::MissingCommandName,
-    ];
-    check_err(input, &expected, &err);
+fn check(input: &str, expected: &[TokenKind]) {
+    let lexed: Vec<TokenKind> = tokenize(input).map(|it| it.kind).collect();
+
+    assert_eq_token(lexed.into_iter(), expected);
 }
 
-#[test]
-fn unknown_char_err() {
-    let input = "\u{1F600}";
-    let expected = vec![UNKNOWN, EOF];
-    let err = vec![LexErrorKind::UnknownChar];
-    check_err(input, &expected, &err);
-}
+// fn check_err(input: &str, expected: &[TokenKind], err: &[TokenKind]) {
+//     let lexed = tokenize(input).map(|it| it.kind).into_iter();
+//     assert_eq_token(lexed, expected);
+// }
 
-fn check(input: &str, expected: &[SyntaxKind]) {
-    let lexed = LexedStr::new(input);
-
-    assert_eq_token(lexed.token(), expected);
-    assert_eq!(lexed.errors().count(), 0);
-}
-
-fn check_err(input: &str, expected: &[SyntaxKind], err: &[LexErrorKind]) {
-    let lexed = LexedStr::new(input);
-    assert_eq_token(lexed.token(), expected);
-    assert_eq_token(lexed.errors().map(|it| it.1), err);
-}
-
-fn assert_eq_token<'a, T: 'a>(token: impl Iterator<Item = &'a T> + 'a, expected: &[T])
+fn assert_eq_token<T>(token: impl Iterator<Item = T>, expected: &[T])
 where
     T: Debug + Clone + PartialEq,
 {
-    let token: Vec<T> = token.into_iter().cloned().collect();
+    let token: Vec<T> = token.collect();
     assert_eq!(token, expected);
 }

@@ -1,62 +1,78 @@
-use std::str::Chars;
+use finl_unicode::grapheme_clusters::Graphemes;
 
-pub struct Cursor<'a> {
-    len_remaining: usize,
-    chars: Chars<'a>,
+pub struct Cursor<'source> {
+    token_len: usize,
+    graphemes: Graphemes<'source>,
+    next_cluster: Option<&'source str>,
+    buf: Vec<char>,
 }
-
-pub(crate) const EOF_CHAR: char = '\0';
 
 impl<'a> Cursor<'a> {
     pub fn new(input: &'a str) -> Cursor<'a> {
+        let mut graphemes = finl_unicode::grapheme_clusters::Graphemes::new(input);
+        let next_cluster = graphemes.next();
         Cursor {
-            len_remaining: input.len(),
-            chars: input.chars(),
+            token_len: 0,
+            graphemes,
+            next_cluster,
+            buf: Vec::new(),
         }
     }
 
     /// Peeks the next symbol from the input stream without consuming it.
-    /// If requested position doesn't exist, 'EOF_CHAR' is returned.
-    /// However, getting 'EOF_CHAR' doesn't always mean actual end of file,
-    /// it should be checked with 'is_eof' method.
-    pub(crate) fn first(&self) -> char {
-        self.chars.clone().next().unwrap_or(EOF_CHAR)
+    pub(crate) fn first(&self) -> Option<&str> {
+        self.next_cluster
     }
 
-    /// Peeks the scond symbol from input stream without consuming it.
-    /// 'EOF_CHAR' could be returned, without actual reaching end of file.
-    /// This should be checked with 'is_eof'
-    pub(crate) fn second(&self) -> char {
-        let mut iter = self.chars.clone();
-        iter.next();
-        iter.next().unwrap_or(EOF_CHAR)
-    }
-
-    /// Checks if there is nothing more to consume.
-    pub(crate) fn is_eof(&self) -> bool {
-        self.chars.as_str().is_empty()
-    }
-
-    /// Returns amount of already consumed symbols.
-    pub(crate) fn pos_within_token(&self) -> u32 {
-        (self.len_remaining - self.chars.as_str().len()) as u32
+    /// Returns amount of already consumed bytes.
+    pub(crate) fn token_len(&self) -> usize {
+        self.token_len
     }
 
     /// Resets the number of bytes consumed to 0.
-    pub(crate) fn reset_pos_within_token(&mut self) {
-        self.len_remaining = self.chars.as_str().len();
+    pub(crate) fn reset_token_len(&mut self) {
+        self.token_len = 0;
     }
 
-    /// Moves to the next character.
-    pub(crate) fn bump(&mut self) -> Option<char> {
-        let c = self.chars.next()?;
-        Some(c)
+    /// Moves to the next grapheme cluster.
+    /// Obtain the value by calling self.buf()
+    pub(crate) fn bump(&mut self) -> Option<()> {
+        let current_cluster = self.next_cluster;
+        if let Some(c) = current_cluster {
+            self.token_len += c.bytes().len();
+        }
+        self.next_cluster = self.graphemes.next();
+
+        match current_cluster {
+            Some(c) => {
+                self.buf = c.chars().collect();
+                Some(())
+            }
+            None => {
+                self.buf = Vec::new();
+                None
+            }
+        }
     }
 
-    /// Eats symbols while predicate returns true or until the end of file is reached.
-    pub(crate) fn eat_while(&mut self, mut predicate: impl FnMut(char) -> bool) {
-        while predicate(self.first()) && !self.is_eof() {
+    /// Eats grapheme cluster while predicate returns true or until the end of file is reached.
+    pub(crate) fn eat_while(&mut self, mut predicate: impl FnMut(&[char]) -> bool) {
+        let mut buf: Vec<char>;
+
+        while self.first().is_some() {
+            match self.first() {
+                None => break,
+                Some(c) => buf = c.chars().collect(),
+            };
+
+            if !predicate(&buf) {
+                break;
+            }
             self.bump();
         }
+    }
+
+    pub(crate) fn buf(&self) -> &[char] {
+        &self.buf
     }
 }

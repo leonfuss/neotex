@@ -5,11 +5,11 @@ use self::TokenKind::*;
 #[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,
-    pub len: u32,
+    pub len: usize,
 }
 
 impl Token {
-    fn new(kind: TokenKind, len: u32) -> Token {
+    fn new(kind: TokenKind, len: usize) -> Token {
         Token { kind, len }
     }
 }
@@ -17,9 +17,17 @@ impl Token {
 /// Enum representing common lexical types
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenKind {
+    CommandIdent,
+
     // Whitespace
     Whitespace, // ' '
     Newline,
+    Comment,  // %....\n
+    AComment, // %% ... \n - Annotated Comment
+
+    Number, // (0-9)+
+    Word,
+    AWord, // ASCII Word
 
     // Braces
     OpenBrace,    // '{'
@@ -29,58 +37,35 @@ pub enum TokenKind {
     OpenParen,    // '('
     CloseParen,   // ')'
 
-    // CommandIdentifier
-    BackSlash, // '\'
-
     // Special Symbols
     Star,       // '*'
     NumSign,    // '#'
     Carret,     // '^'
+    Less,       // '<'
+    Greater,    // '>'
     Underscore, // '_'
-    Lt,         // '<'
-    Gt,         // '>'
     Apostrophe, // "'"
     Slash,      // '/'
     Tilde,      // '~'
-    Percent,    // '%'
     Comma,      // ','
     Semicolon,  // ';'
     Ampersand,  // '&'
-    Eq,         // '='
+    Equal,      // '='
     Pipe,       // '|'
     Colon,      // ':'
     Dollar,     // '$'
-    At,         // '@'
     Minus,      // '-'
     Plus,       // '+'
+    Dot,        // '.'
+    At,         // '@'
 
-    // Math / Sentence End
-    Dot, // '.'
-
-    // Sentence End
     Question, // '?'
     Bang,     // '!'
 
-    // Alpha-Numerical
-    Number,    // '0-9'
-    AsciiWord, // '([A-Z][a-z])*' seperated by all other charactersn
-    Word,      // rest inculding all not "tex-command"-valid characters
-
-    // Unknow value
-    Unknown,
+    Unknown, // only if grapheme segmentation failed
 
     // End of Input
     Eof,
-}
-
-impl TokenKind {
-    pub fn is_empty_char(&self) -> bool {
-        *self == Whitespace || *self == Newline
-    }
-
-    pub fn is_valid_macro_name(&self) -> bool {
-        !(self.is_empty_char() || *self == Word || *self == Eof)
-    }
 }
 
 pub fn tokenize(input: &str) -> impl Iterator<Item = Token> + '_ {
@@ -100,9 +85,12 @@ pub fn tokenize(input: &str) -> impl Iterator<Item = Token> + '_ {
 pub fn is_whitespace(c: char) -> bool {
     matches!(
         c,
-        // Usual ASCII suspects
         '\u{0009}'   // \t
         | '\u{0020}' // space
+        | '\u{00A0}' // no-break space
+        | '\u{1680}' // ogham space mark
+        | '\u{202F}' // narrow no-break space
+        | '\u{3000}' // ideographic space
 
         // Bidi markers
         | '\u{200E}' // LEFT-TO-RIGHT MARK
@@ -110,45 +98,65 @@ pub fn is_whitespace(c: char) -> bool {
     )
 }
 
-/// Checks
-pub fn is_newline(first: char, second: char) -> bool {
-    let is_single_char_newline_character = matches!(
-        first,
+pub fn is_command_name(c: char) -> bool {
+    c == '@' || c.is_ascii_alphabetic()
+}
+
+/// Checks newline character for a singel char. This does
+/// of course not check for '\r\n'
+pub fn is_newline(c: char) -> bool {
+    matches!(
+        c,
         '\u{000A}' // \n
         | '\u{000B}' // vertical tab
         | '\u{000C}' // form feed
         | '\u{000D}' // \r
-        // NEXT LINE from latin1
-        | '\u{0085}'
+        | '\u{0085}' // NEXT LINE from latin1
+
         // Dedicated whitespace characters from Unicode
         | '\u{2028}' // LINE SEPARATOR
         | '\u{2029}' // PARAGRAPH SEPARATOR
-    );
-
-    return is_single_char_newline_character | is_multi_char_newline(first, second);
+    )
 }
 
 pub fn is_multi_char_newline(first: char, second: char) -> bool {
-    match (first, second) {
-        ('\u{000D}', '\u{000A}') => true,
-        _ => false,
-    }
+    matches!((first, second), ('\u{000D}', '\u{000A}'))
 }
 
 impl Cursor<'_> {
     pub fn advance_token(&mut self) -> Token {
-        let first_char = match self.bump() {
+        match self.bump() {
             Some(c) => c,
             None => return Token::new(TokenKind::Eof, 0),
         };
 
-        let token_kind = match first_char {
+        let token_kind = self.token_kind();
+
+        let res = Token::new(token_kind, self.token_len());
+        self.reset_token_len();
+        res
+    }
+
+    fn token_kind(&mut self) -> TokenKind {
+        let cluster = self.buf();
+
+        // sort into ascii and non_ascii
+        match cluster.len() {
+            0 => return Unknown,
+            1 => {}
+            2 => return self.word_or_newline(),
+            _ => return self.word(),
+        };
+
+        let ascii_char = cluster[0];
+
+        match ascii_char {
+            c if is_newline(c) => Newline,
             c if is_whitespace(c) => self.whitespace(),
-            c if is_newline(c, self.first()) => self.newline(c),
 
-            '0'..='9' => Number,
-
-            '\u{005C}' => BackSlash,
+            '%' => self.comment(),
+            '\u{005C}' => CommandIdent,
+            '0'..='9' => self.number(),
 
             '{' => OpenBrace,
             '}' => CloseBrace,
@@ -162,91 +170,129 @@ impl Cursor<'_> {
             ';' => Semicolon,
             ',' => Comma,
             ':' => Colon,
-            '@' => At,
             '#' => NumSign,
             '~' => Tilde,
             '$' => Dollar,
             '?' => Question,
             '!' => Bang,
             '&' => Ampersand,
-            '=' => Eq,
-            '<' => Lt,
-            '>' => Gt,
+            '=' => Equal,
+            '<' => Less,
+            '>' => Greater,
             '-' => Minus,
             '+' => Plus,
             '|' => Pipe,
             '^' => Carret,
-            '%' => Percent,
             '\'' => Apostrophe,
             '_' => Underscore,
             '/' => Slash,
+            '@' => At,
 
-            c if c.is_ascii_alphabetic() => self.ascii_word(),
-            c if c.is_alphabetic() => self.word(),
-            _ => Unknown,
-        };
-
-        let res = Token::new(token_kind, self.pos_within_token());
-        self.reset_pos_within_token();
-        res
+            c if c.is_ascii() => self.ascii_word(),
+            _ => self.word(),
+        }
     }
 
     fn whitespace(&mut self) -> TokenKind {
-        self.eat_while(is_whitespace);
+        self.eat_while(|c| matches!(c.len(), 1 if is_whitespace(c[0])));
         Whitespace
     }
 
-    fn newline(&mut self, current: char) -> TokenKind {
-        if is_multi_char_newline(current, self.first()) {
-            self.bump();
+    fn word_or_newline(&mut self) -> TokenKind {
+        let cluster = self.buf();
+        assert!(cluster.len() == 2);
+
+        match cluster[0] {
+            '\u{000D}' => Newline,
+            _ => self.word(),
         }
-        loop {
-            match (self.first(), self.second()) {
-                (f, s) if is_multi_char_newline(f, s) => {
-                    self.bump();
-                    self.bump()
-                }
-                (f, s) if is_newline(f, s) => self.bump(),
-                (_, _) => break,
-            };
-        }
-        Newline
     }
 
-    // Numbers are treated as whole blocks. It remains to be seen if this is
-    // the most efficient choice. It depends on how often the numberblocks must be
-    // split up again. - eg. when used as macro options
-    // fn number(&mut self) -> TokenKind {
-    //     loop {
-    //         match self.first() {
-    //             '0'..='9' => self.bump(),
-    //             _ => break,
-    //         };
-    //     }
-    //     Number
-    // }
+    fn comment(&mut self) -> TokenKind {
+        let mut comment_ty = Comment;
+        let mut buf: Vec<char>;
 
-    // We treat ascii-words differently to allow easy building of marcros.
-    // If an ascii-word is captured after a backslash, the ascii-word is the
-    // macro name. The input is invalid if its is any other multichar characters.
-    fn ascii_word(&mut self) -> TokenKind {
         loop {
             match self.first() {
-                c if c.is_ascii_alphabetic() => self.bump(),
+                None => break,
+                Some(c) => buf = c.chars().collect(),
+            };
+
+            match buf.len() {
+                0 => break,
+                1 if buf[0] == '%' => {
+                    comment_ty = AComment;
+                    self.bump()
+                }
+                1 if is_newline(buf[0]) => {
+                    self.bump();
+                    break;
+                }
+                2 if buf[0] == '\u{000D}' => {
+                    self.bump();
+                    break;
+                }
+                _ => self.bump(),
+            };
+        }
+        comment_ty
+    }
+
+    // Numbers are treated as whole blocks.
+    fn number(&mut self) -> TokenKind {
+        let mut buf: Vec<char>;
+        loop {
+            match self.first() {
+                None => break,
+                Some(c) => buf = c.chars().collect(),
+            }
+
+            if buf.is_empty() {
+                break;
+            }
+
+            match buf[0] {
+                '0'..='9' => self.bump(),
                 _ => break,
             };
         }
-        AsciiWord
+        Number
     }
 
     fn word(&mut self) -> TokenKind {
+        let mut buf: Vec<char>;
+
         loop {
             match self.first() {
-                c if c.is_ascii_alphabetic() => break,
-                c if c.is_alphabetic() => self.bump(),
-                _ => break,
+                None => break,
+                Some(c) => buf = c.chars().collect(),
+            };
+
+            match buf.len() {
+                0 => break,
+                1 if buf[0].is_whitespace() => break,
+                1 if buf[0].is_ascii() => break,
+                _ => self.bump(),
             };
         }
         Word
+    }
+    fn ascii_word(&mut self) -> TokenKind {
+        let mut buf: Vec<char>;
+
+        loop {
+            match self.first() {
+                None => break,
+                Some(c) => buf = c.chars().collect(),
+            };
+
+            match buf.len() {
+                0 => break,
+                1 if buf[0].is_whitespace() => break,
+                1 if buf[0].is_ascii_alphabetic() => self.bump(),
+                _ => break,
+            };
+        }
+        AWord
     }
 }
