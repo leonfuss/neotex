@@ -1,6 +1,6 @@
 <p align="center">
   <img
-    src="https://raw.githubusercontent.com/NeoTeXCore/neotex/main/assets/logo.svg?token=GHSAT0AAAAAACFSFW6IJSPEMVFOLEX5S4VUZIARBNA"
+    src="https://gist.githubusercontent.com/leonfuss/9247909d6237cb406439944fe22405a4/raw/02853019c2e0187bfb518dba1052ed5338c144c8/logo.svg"
     alt="neotex logo">
 </p>
 
