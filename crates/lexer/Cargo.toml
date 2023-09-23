@@ -7,3 +7,4 @@ authors.workspace = true
 
 [dependencies]
 finl_unicode = "1.2.0"
+

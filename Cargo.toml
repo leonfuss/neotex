@@ -1,2 +1,21 @@
 [workspace]
 members = ["crates/*"]
+default-members = ["crates/neotex"]
+resolver = "2"
+
+[workspace.package]
+rust-version = "1.71"
+edition = "2021"
+authors = ["Leon Fuss"]
+
+[profile.release]
+opt-level = 3
+lto = true
+
+[workspace.dependencies]
+# local crates
+lexer = { path = "./crates/lexer", version = "0.0.0" }
+parser = { path = "./crates/parser", version = "0.0.0" }
+
+tracing = "0.1"
+thiserror = "1.0"
