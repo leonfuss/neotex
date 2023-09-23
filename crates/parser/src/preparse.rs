@@ -37,6 +37,34 @@ macro_rules! is_peek {
     };
 }
 
+/// macro shorthand for pathspec seperators
+macro_rules! name_seperator {
+    ($name:ident, $func:ident, $err:expr) => {
+        fn $name(&mut self) {
+            assert_eq!(self.peek(), Some(TokenKind::Colon));
+            self.bump();
+
+            match self.peek() {
+                Some(TokenKind::Colon) => {}
+                _ => {
+                    self.bump();
+                    self.add_error_token(PreparseErrorKind::InvalidPathSpecSeperator);
+                }
+            }
+
+            match self.peek() {
+                Some(TokenKind::Word) | Some(TokenKind::Underscore) => {
+                    self.$func();
+                }
+                _ => {
+                    self.bump();
+                    self.add_error_token($err)
+                }
+            }
+        }
+    };
+}
+
 /// Represents the result of pre-parsing LaTeX source code (parsing-stage 1). It holds a reference to the input string,
 /// the pre-parsed syntax tokens and their corresponding byte start positions, resulting pre-parse errors,
 /// as well as definitions in the pre-parsed code and their positions in bytes.
@@ -326,6 +354,23 @@ pub(crate) enum PreparseErrorKind {
     /// both of which are only allowed as prefix or midsection characters of a command but not
     /// as postfix characters.
     InvalidCommandNameEnding,
+    /// Signifies, that a multichar command started with a number. Numbers are only allowed in
+    /// midsection and postfix position.
+    InvalidCommandPrefix,
+    /// Indicates that a variable name after the '@' identifier is missing
+    VariableNameMissing,
+    /// Indicates an invalid variable name. Variable names are only allowed to consist of
+    /// ASCII-Words and Underscores after the Variable identifier at ('@').
+    InvalidVariableName,
+    /// Signifies an issue where a variable name ends with an underscore ('_')., which is only
+    /// allowed as prefix or midsection character but not as postfix character.
+    InvalidVariableNameEnding,
+    /// Signifies an invalid pathspec seperator. Pathspec seperator must be exacltly '::'
+    InvalidPathSpecSeperator,
+    /// Signifies and invalid function name. Functions consist of ASCII-Words, Numbers and
+    /// Underscores. Numbers must not occcur as prefix, while in contrast Underscores are not
+    /// allowed to occur at postfix position
+    InvalidFunctionName,
 }
 
 /// Represents a pre-parse error encountered during the pre-parsing of LaTeX source code.
@@ -434,7 +479,7 @@ impl<'source, I: Iterator<Item = Token>> Converter<'source, I> {
     fn token(&mut self, token: TokenKind) {
         trace!(?token, "match new token");
         match token {
-            TokenKind::CommandIdent => self.command(),
+            TokenKind::CommandIdent => self.command_or_var(),
             TokenKind::Newline => self.newline_or_break(),
             TokenKind::Less if self.is_peek_eq() => self.add_token(LessEq),
             TokenKind::Less if self.is_peek_minus() => self.add_token(LeftArrow),
@@ -515,13 +560,14 @@ impl<'source, I: Iterator<Item = Token>> Converter<'source, I> {
         skip(self),
         fields(self.lexed.tokens.len = ?self.lexed.tokens.len())
     )]
-    fn add_command_token(&mut self) {
+    fn add_command_token(&mut self, is_command: bool) {
         trace!("adding command token");
 
         let begin = self.position - self.token_size;
         let end = self.position;
         let command_name = &self.lexed.src[begin..end];
 
+        let mut is_command_or_function = false;
         match command_name {
             "\\def" => self.add_definition(DefinitionKind::Def),
             "\\newcommand" => self.add_definition(DefinitionKind::Command),
@@ -529,22 +575,31 @@ impl<'source, I: Iterator<Item = Token>> Converter<'source, I> {
             "\\usepackage" => self.add_definition(DefinitionKind::Package),
             "\\input" => self.add_definition(DefinitionKind::Input),
             "\\include" => self.add_definition(DefinitionKind::Include),
-            _ => {}
+            "\\mod" => self.add_token(Module),
+            "\\fn" => self.add_token(FunctionIdentifier),
+            _ => is_command_or_function = true,
         }
 
-        self.add_token(Command);
+        if is_command || !is_command_or_function {
+            self.add_token(Command);
+        } else {
+            self.add_token(CommandOrFunction)
+        }
     }
 
-    // === Command and Definition Processing ===
+    // === Command, Variable and Definition Processing ===
 
     /// Handles the pre-parsing of a LaTeX command.
     #[instrument(
         skip(self),
         fields(self.lexed.tokens.len = ?self.lexed.tokens.len())
     )]
-    fn command(&mut self) {
+    fn command_or_var(&mut self) {
         trace!("begin command matching");
 
+        let mut is_number = false;
+        // used to determine later on if name is valid;
+        let mut is_valid_function_name = false;
         // matching simple error cases
         match self.peek() {
             None
@@ -559,6 +614,12 @@ impl<'source, I: Iterator<Item = Token>> Converter<'source, I> {
                 self.bump();
                 return self.add_error_token(PreparseErrorKind::InvalidCommandName);
             }
+            Some(TokenKind::At) => {
+                self.bump();
+                return self.variable();
+            }
+            Some(TokenKind::Number) => is_number = true,
+            Some(TokenKind::AWord) | Some(TokenKind::Underscore) => is_valid_function_name = true,
             _ => {}
         };
 
@@ -568,12 +629,26 @@ impl<'source, I: Iterator<Item = Token>> Converter<'source, I> {
 
         // peek into second command token
         let Some(peek_second_token) = self.peek() else {
-            return self.add_command_token();
+            return self.add_command_token(!is_valid_function_name);
         };
 
         match peek_second_token {
+            TokenKind::AWord | TokenKind::Number | TokenKind::Underscore | TokenKind::Colon
+                if is_number =>
+            {
+                // do not include '*'. We consider \8* valid command syntax.
+                self.bump();
+                self.add_error_token(PreparseErrorKind::InvalidCommandPrefix)
+            }
             TokenKind::AWord | TokenKind::Number => {}
-            TokenKind::Colon | TokenKind::Underscore if self.is_valid_in_command_char() => {}
+            TokenKind::Colon if self.peek_second() == Some(TokenKind::Colon) => {
+                self.add_token(Function);
+                return self.function_name_seperator();
+            }
+            TokenKind::Colon if self.is_valid_in_command_char() => {
+                is_valid_function_name = false;
+            }
+            TokenKind::Underscore if self.is_valid_in_command_char() => {}
             TokenKind::Colon | TokenKind::Underscore => {
                 // eating erroneous token
                 self.bump();
@@ -582,11 +657,11 @@ impl<'source, I: Iterator<Item = Token>> Converter<'source, I> {
             TokenKind::Star => {
                 // '*' terminates a command immediatly
                 self.bump();
-                return self.add_command_token();
+                return self.add_command_token(!is_valid_function_name);
             }
             _ => {
                 // single token command
-                return self.add_command_token();
+                return self.add_command_token(!is_valid_function_name);
             }
         };
 
@@ -595,7 +670,7 @@ impl<'source, I: Iterator<Item = Token>> Converter<'source, I> {
 
         // ending after second token with Number or AWord
         if self.peek().is_none() {
-            return self.add_command_token();
+            return self.add_command_token(!is_valid_function_name);
         }
 
         trace!("second command token valid");
@@ -604,7 +679,14 @@ impl<'source, I: Iterator<Item = Token>> Converter<'source, I> {
         while let Some(token) = self.peek() {
             match token {
                 TokenKind::AWord | TokenKind::Number => {}
-                TokenKind::Colon | TokenKind::Underscore if self.is_valid_in_command_char() => {}
+                TokenKind::Colon if self.peek_second() == Some(TokenKind::Colon) => {
+                    self.add_token(Function);
+                    return self.function_name_seperator();
+                }
+                TokenKind::Colon if self.is_valid_in_command_char() => {
+                    is_valid_function_name = false;
+                }
+                TokenKind::Underscore if self.is_valid_in_command_char() => {}
                 TokenKind::Colon | TokenKind::Underscore => {
                     // eating erroneous token
                     self.bump();
@@ -620,8 +702,85 @@ impl<'source, I: Iterator<Item = Token>> Converter<'source, I> {
             self.bump();
         }
 
-        self.add_command_token();
+        self.add_command_token(!is_valid_function_name);
     }
+
+    /// Match a NeoTeX variable declaration. Variable name consist of an '\' followed by an '@'
+    /// followed by a combination of [`AWord`] and [`Underscore`]. Command names can not end with
+    /// an [`Underscore`]. The '@' must be bumped before calling this function.
+    fn variable(&mut self) {
+        let Some(token) = self.peek() else {
+            return self.add_error_token(PreparseErrorKind::VariableNameMissing);
+        };
+
+        match token {
+            TokenKind::Whitespace
+            | TokenKind::Newline
+            | TokenKind::Comment
+            | TokenKind::AComment => {
+                return self.add_error_token(PreparseErrorKind::VariableNameMissing);
+            }
+            TokenKind::AWord => {}
+            TokenKind::Underscore if self.is_valid_in_variable_char() => {}
+            TokenKind::Colon => self.variable_name_seperator(),
+            _ => {
+                self.bump();
+                return self.add_error_token(PreparseErrorKind::InvalidVariableName);
+            }
+        }
+
+        self.bump();
+
+        while let Some(token) = self.peek() {
+            match token {
+                TokenKind::Word | TokenKind::Number => {}
+                TokenKind::Underscore if self.is_valid_in_command_char() => {}
+                TokenKind::Colon => {
+                    self.add_token(Variable);
+                    // seperator errors get handled by name_seperator()
+                    return self.variable_name_seperator();
+                }
+                _ => break,
+            }
+            self.add_token(Variable)
+        }
+    }
+
+    /// Handle functions. Should only be called from `self.function_name_seperator()`
+    fn function(&mut self) {
+        assert!(matches!(
+            self.peek(),
+            Some(TokenKind::AWord) | Some(TokenKind::Underscore)
+        ));
+        self.bump();
+
+        while let Some(token) = self.peek() {
+            match token {
+                TokenKind::Underscore if self.is_valid_in_variable_char() => {}
+                TokenKind::AWord | TokenKind::Number => {}
+                TokenKind::Colon => {
+                    self.add_token(Function);
+                    // seperator errors get handled by name_seperator()
+                    return self.function_name_seperator();
+                }
+                _ => break,
+            }
+            self.bump();
+        }
+        self.add_token(Function)
+    }
+
+    name_seperator!(
+        function_name_seperator,
+        function,
+        PreparseErrorKind::InvalidFunctionName
+    );
+
+    name_seperator!(
+        variable_name_seperator,
+        variable,
+        PreparseErrorKind::InvalidVariableName
+    );
 
     /// Helper for checking if a current character is valid within a LaTeX command name based on
     /// next character.
@@ -630,6 +789,19 @@ impl<'source, I: Iterator<Item = Token>> Converter<'source, I> {
             matches!(
                 token,
                 TokenKind::AWord | TokenKind::Number | TokenKind::Underscore | TokenKind::Colon
+            )
+        } else {
+            false
+        }
+    }
+
+    /// Helper for checking if a churrent character is valid within a LaTeX command name based on
+    /// next character.
+    fn is_valid_in_variable_char(&self) -> bool {
+        if let Some(token) = self.peek_second() {
+            matches!(
+                token,
+                TokenKind::AWord | TokenKind::Number | TokenKind::Underscore
             )
         } else {
             false

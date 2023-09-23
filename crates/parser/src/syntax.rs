@@ -2,9 +2,12 @@
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
 pub enum SyntaxKind {
-    // Command tokens
-    /// Command token (e.g., '\command')
+    /// Command tokens
     Command,
+    /// Called if it could not be determined if token is function or macro
+    CommandOrFunction,
+    /// FunctionToken
+    Function,
 
     // Whitespace and formatting tokens
     /// Whitespace token (e.g., ' ')
@@ -122,7 +125,14 @@ pub enum SyntaxKind {
     /// OPTIONBLOCK grouping token (e.g., '[...]')
     OPTIONBLOCK,
 
-    // Fixed command tokens
+    // Fixed identifier
+    /// Function declaration
+    FunctionIdentifier, // \fn
+    /// Module Declaration
+    Module, // \mod
+    /// Variable declaration
+    Variable, // \@<name> only with underscore and ASCII-Word
+
     /// BeginGroup token (e.g., '\begin')
     BeginGroup, // \begin
     /// EndGroup token (e.g., '\end')
