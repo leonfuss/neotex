@@ -8,4 +8,10 @@ authors.workspace = true
 [dependencies]
 lexer.workspace = true
 tracing.workspace = true
+visibility.workspace = true
+
+[features]
+integration-tests = []
+
+
 

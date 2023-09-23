@@ -40,6 +40,7 @@ macro_rules! is_peek {
 /// Represents the result of pre-parsing LaTeX source code (parsing-stage 1). It holds a reference to the input string,
 /// the pre-parsed syntax tokens and their corresponding byte start positions, resulting pre-parse errors,
 /// as well as definitions in the pre-parsed code and their positions in bytes.
+#[cfg_attr(feature = "integration-tests", visibility::make(pub))]
 #[derive(Debug)]
 pub(crate) struct LexedStr<'source> {
     src: &'source str,
@@ -63,6 +64,7 @@ impl<'source> LexedStr<'source> {
     /// # Examples
     ///
     /// ```rust
+    /// # use parser::preparse::LexedStr;
     /// let input = "\\documentclass{article} \\begin{document} Hello, World! \\end{document}";
     /// let lexed = LexedStr::new(input);
     ///
@@ -104,13 +106,15 @@ impl<'source> LexedStr<'source> {
     /// # Examples
     ///
     /// ```rust
+    /// # use parser::preparse::LexedStr;
+    /// # use parser::SyntaxKind;
     /// let input = "\\section{Title} Some text.";
     /// let lexed = LexedStr::new(input);
     ///
     /// for token in lexed.syntax_tokens() {
     ///     match token {
     ///         SyntaxKind::Command => println!("Found a command token."),
-    ///         SyntaxKind::Identifier => println!("Found an identifier token."),
+    ///         SyntaxKind::Comment => println!("Found an comment token."),
     ///         // Handle other token types as needed.
     ///         _ => {}
     ///     }
@@ -137,13 +141,15 @@ impl<'source> LexedStr<'source> {
     /// # Examples
     ///
     /// ```rust
+    /// # use parser::preparse::LexedStr;
+    /// # use parser::preparse::DefinitionKind;
     /// let input = "\\newcommand{\\mycommand}[1]{...}";
     /// let lexed = LexedStr::new(input);
     ///
     /// for def in lexed.definitions() {
     ///     match def.kind {
     ///         DefinitionKind::Def => println!("Found a LaTeX \\def command."),
-    ///         DefinitionKind::Import => println!("Found a LaTeX \\import command."),
+    ///         DefinitionKind::Input => println!("Found a LaTeX \\input command."),
     ///         DefinitionKind::Include => println!("Found a LaTeX \\include command."),
     ///         DefinitionKind::Package => println!("Found a LaTeX \\usepackage command."),
     ///         DefinitionKind::Environment => println!("Found a LaTeX \\newenvironment command."),
@@ -175,6 +181,8 @@ impl<'source> LexedStr<'source> {
     ///
     /// ```rust
     /// // the postfix '_' is not a valid command name
+    /// # use parser::preparse::LexedStr;
+    /// # use parser::preparse::PreparseErrorKind;
     /// let input = "\\invalid_command_{...}";
     /// let lexed = LexedStr::new(input);
     ///
@@ -204,7 +212,7 @@ impl<'source> LexedStr<'source> {
     /// # Examples
     ///
     /// ```rust
-    /// use your_module::LexedStr;
+    /// # use parser::preparse::LexedStr;
     ///
     /// let input = "\\section{Title} Some text.";
     /// let lexed = LexedStr::new(input);
@@ -225,6 +233,7 @@ impl<'source> LexedStr<'source> {
 ///
 /// This categorization allows for easy identification and processing of different types of
 /// LaTeX constructs within the pre-parsed source code.
+#[cfg_attr(feature = "integration-tests", visibility::make(pub))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum DefinitionKind {
     /// Represents LaTeX `\package` command.
@@ -256,19 +265,24 @@ pub(crate) enum DefinitionKind {
 /// # Examples
 ///
 /// ```rust
+/// # use parser::preparse::LexedStr;
 /// # let input = "asdfasdf";
 /// let lexed = LexedStr::new(input);
 ///
-/// for def in lexed.definitions{
+/// for def in lexed.definitions(){
 ///    match def {
 ///       // do something with the definitions
 ///       _ => {}
 ///    }
 /// }
 /// ```
+#[cfg_attr(feature = "integration-tests", visibility::make(pub))]
 #[derive(Debug)]
 pub(crate) struct Definition {
     /// The type or category of the LaTeX definition.
+    #[cfg(feature = "integration-tests")]
+    pub kind: DefinitionKind,
+    #[cfg(not(feature = "integration-tests"))]
     kind: DefinitionKind,
     /// The index of the definition within the pre-parsed source code tokens.
     idx: usize,
@@ -298,6 +312,7 @@ impl Definition {
 /// The `PreparseErrorKind` enum categorizes pre-parse errors into distinct types, providing
 /// information about the specific issue encountered during pre-parsing. These error types
 /// help identify problems early in the processing pipeline.
+#[cfg_attr(feature = "integration-tests", visibility::make(pub))]
 #[derive(Debug)]
 pub(crate) enum PreparseErrorKind {
     /// Indicates that a command name is missing, typically occurring when a command
@@ -328,19 +343,24 @@ pub(crate) enum PreparseErrorKind {
 /// # Examples
 ///
 /// ```rust
+/// # use parser::preparse::LexedStr;
 /// # let input = "asdfasdf";
 /// let lexed = LexedStr::new(input);
 ///
-/// for err in lexed.errors{
+/// for err in lexed.errors(){
 ///    match err {
 ///       // do something with the errors
 ///       _ => {}
 ///    }
 /// }
 /// ```
+#[cfg_attr(feature = "integration-tests", visibility::make(pub))]
 #[derive(Debug)]
 pub(crate) struct PreparseError {
     /// The type or category of the pre-parse error.
+    #[cfg(feature = "integration-tests")]
+    pub kind: PreparseErrorKind,
+    #[cfg(not(feature = "integration-tests"))]
     kind: PreparseErrorKind,
     /// The index of the source code tokens where the error occurred.
     idx: usize,
