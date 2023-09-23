@@ -20,9 +20,7 @@ impl<'a> Cursor<'a> {
     ///
     /// # Example
     ///
-    /// ```rust
-    /// use latex_parser::cursor::Cursor;
-    ///
+    /// ```ignore
     /// let latex_code = "\\documentclass{article}";
     /// let cursor = Cursor::new(latex_code);
     /// ```

@@ -116,6 +116,7 @@ pub enum TokenKind {
 /// # Example
 ///
 /// ```rust
+/// # use lexer::tokenize;
 /// let latex_code = "\\documentclass{article}";
 /// let tokens: Vec<_> = tokenize(latex_code).collect();
 ///
