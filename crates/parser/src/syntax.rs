@@ -1,3 +1,5 @@
+use lexer::TokenKind;
+
 /// The Kind of a Syntax Node
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
@@ -126,12 +128,18 @@ pub enum SyntaxKind {
     OPTIONBLOCK,
 
     // Fixed identifier
+    /// The modul or package identifier in between '::'
+    Namespace,
+    /// module path seperator
+    PathSeperator, // '::' in function and variable calls
     /// Function declaration
     FunctionIdentifier, // \fn
     /// Module Declaration
     Module, // \mod
     /// Variable declaration
     Variable, // \@<name> only with underscore and ASCII-Word
+    /// usage decleration. eg. \use ::sdaf::asdfa
+    Use,
 
     /// BeginGroup token (e.g., '\begin')
     BeginGroup, // \begin
@@ -154,13 +162,26 @@ pub enum SyntaxKind {
     Error,
 }
 
-impl SyntaxKind {
-    /// Shorthand for determining if Token is Whitespace, Newline or Comment
-    #[inline]
-    pub fn is_trivia(self) -> bool {
+pub(crate) trait Trivia {
+    fn is_trivia(&self) -> bool;
+}
+
+impl Trivia for SyntaxKind {
+    #[inline(always)]
+    fn is_trivia(&self) -> bool {
         matches!(
             self,
             SyntaxKind::Whitespace | SyntaxKind::Newline | SyntaxKind::Comment
+        )
+    }
+}
+
+impl Trivia for TokenKind {
+    #[inline(always)]
+    fn is_trivia(&self) -> bool {
+        matches!(
+            self,
+            TokenKind::Whitespace | TokenKind::Newline | TokenKind::Comment | TokenKind::AComment
         )
     }
 }
