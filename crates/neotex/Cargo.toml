@@ -12,5 +12,7 @@ lexer.workspace = true
 parser.workspace = true
 tracing.workspace = true
 
-
 tracing-subscriber = "0.3"
+
+[features]
+integration-tests = []
