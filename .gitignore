@@ -6,3 +6,6 @@ target/
 
 # MSVC Windows builds of rustc 
 *.pdb
+
+# Macos DS_Store
+**/.DS_Store
