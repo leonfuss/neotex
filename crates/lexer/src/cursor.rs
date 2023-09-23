@@ -5,6 +5,7 @@ use finl_unicode::grapheme_clusters::Graphemes;
 /// The `Cursor` struct is used for efficient and UTF-8-safe iteration through LaTeX source code.
 /// It utilizes grapheme clusters to correctly process multi-byte characters, ensuring accurate
 /// tokenization.
+#[cfg_attr(feature = "integration-tests", visibility::make(pub))]
 pub(crate) struct Cursor<'source> {
     token_len: usize,
     graphemes: Graphemes<'source>,
@@ -20,7 +21,8 @@ impl<'a> Cursor<'a> {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```
+    /// # use ::lexer::cursor::Cursor;
     /// let latex_code = "\\documentclass{article}";
     /// let cursor = Cursor::new(latex_code);
     /// ```

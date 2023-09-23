@@ -6,5 +6,10 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
+visibility.workspace = true
+
 finl_unicode = "1.2.0"
+
+[features]
+integration-tests = []
 

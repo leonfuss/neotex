@@ -28,7 +28,8 @@
 //!
 //! **Part of [NeoTeX](../neotex/index.html)**
 
-mod cursor;
+/// Curser module - only visible to allow conditional integration tests
+pub mod cursor;
 /// This module defines the core functionality for tokenizing LaTeX source code.
 /// Tokenization is the process of breaking down LaTeX code into individual tokens,
 /// such as commands, words, and symbols, making it easier for further processing.

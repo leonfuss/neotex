@@ -25,6 +25,7 @@ name = "lexer"
 version = "0.0.0"
 dependencies = [
  "finl_unicode",
+ "visibility",
 ]
 
 [[package]]
@@ -71,6 +72,7 @@ version = "0.0.0"
 dependencies = [
  "lexer",
  "tracing",
+ "visibility",
 ]
 
 [[package]]
@@ -202,6 +204,17 @@ name = "valuable"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830b7e5d4d90034032940e4ace0d9a9a057e7a45cd94e6c007832e39edb82f6d"
+
+[[package]]
+name = "visibility"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3fd98999db9227cf28e59d83e1f120f42bc233d4b152e8fab9bc87d5bb1e0f8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "winapi"

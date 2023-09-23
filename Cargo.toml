@@ -19,3 +19,7 @@ parser = { path = "./crates/parser", version = "0.0.0" }
 
 tracing = "0.1"
 thiserror = "1.0"
+
+# change visibility of structs / functions / etc. for doc-tests
+visibility = "0.1.0"
+
