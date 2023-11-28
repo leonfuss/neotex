@@ -1,3 +1,4 @@
+use self::SyntaxKind::*;
 use lexer::TokenKind;
 
 /// The Kind of a Syntax Node
@@ -5,10 +6,10 @@ use lexer::TokenKind;
 #[repr(u16)]
 pub enum SyntaxKind {
     /// Command tokens
+    Macro,
+    /// Everything is classified as Command by the Preparser
     Command,
-    /// Called if it could not be determined if token is function or macro
-    CommandOrFunction,
-    /// FunctionToken
+    /// Function Token
     Function,
 
     // Whitespace and formatting tokens
@@ -62,6 +63,8 @@ pub enum SyntaxKind {
     Greater,
     /// Greater than or equal token (e.g., '>=')
     GreaterEq,
+    /// Comparison (e.g. '==')
+    Comparison,
     /// Underscore token (e.g., '_')
     Underscore,
     /// Apostrophe token (e.g., '\'')
@@ -140,6 +143,15 @@ pub enum SyntaxKind {
     Variable, // \@<name> only with underscore and ASCII-Word
     /// usage decleration. eg. \use ::sdaf::asdfa
     Use,
+    /// \pub ore \pub(crate)
+    Scope,
+
+    // == Definition Tokens
+    Def,
+    NewCommand,
+    NewEnv,
+    UsePackage,
+    Input,
 
     /// BeginGroup token (e.g., '\begin')
     BeginGroup, // \begin
@@ -150,16 +162,48 @@ pub enum SyntaxKind {
     /// FileInput token (e.g., '\import', '\include', '\input')
     FileInput, // \import, \include, \input
     /// PackageInput token (e.g., '\usepackage')
-    PackageInput, // \usepackage
+    /// PackageInput, // \usepackage
     /// ProvidesPackage token (e.g., '\ProvidesPackage')
-    ProvidesPackage, // \ProvidesPackage
+    // ProvidesPackage, // \ProvidesPackage
     /// NeedsTeXFormat token (e.g., '\NeedsTeXFormat')
-    NeedsTeXFormat, // \NeedsTeXFormat
+    // NeedsTeXFormat, // \NeedsTeXFormat
     /// End-of-file token
     Eof,
 
     /// Error token
     Error,
+}
+
+impl SyntaxKind {
+    pub fn is_preprocess_trivia(&self) -> bool {
+        matches!(
+            self,
+            SyntaxKind::Whitespace
+                | SyntaxKind::Newline
+                | SyntaxKind::Comment
+                | SyntaxKind::AComment
+                | SyntaxKind::Break
+        )
+    }
+
+    pub fn is_special(&self) -> bool {
+        matches!(
+            self,
+            Command
+                | Function
+                | Namespace
+                | PathSeperator
+                | FunctionIdentifier
+                | Module
+                | Variable
+                | Use
+                | BeginGroup
+                | EndGroup
+                | DocClass
+                | FileInput // |   PackageInput |
+                            // ProvidesPackage | NeedsTeXFormat
+        )
+    }
 }
 
 pub(crate) trait Trivia {

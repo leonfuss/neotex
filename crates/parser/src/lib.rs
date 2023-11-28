@@ -4,7 +4,7 @@
 #![doc(
     html_favicon_url = "https://gist.githubusercontent.com/leonfuss/fa44f11267796b352edaa121675cd6f2/raw/ae237aa701a5d087c89af313299858f5e1c1144f/favicon.svg"
 )]
-#![deny(missing_docs)]
+#![warn(missing_docs)]
 
 //! **Part of [NeoTeX](../neotex/index.html)**
 
@@ -29,8 +29,13 @@
 /// efficient parsing process.
 pub mod preparse;
 
+pub mod preprocessor;
+
 /// LaTeX Syntax Tokens
 pub mod syntax;
+
+mod parser;
+mod utils;
 
 pub use syntax::SyntaxKind;
 

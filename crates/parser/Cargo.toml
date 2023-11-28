@@ -10,6 +10,9 @@ lexer.workspace = true
 tracing.workspace = true
 visibility.workspace = true
 
+rustc-hash = "1.1.0"
+salsa = "0.17.0-pre.2"
+
 [features]
 integration-tests = []
 
