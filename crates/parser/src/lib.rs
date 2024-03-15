@@ -26,12 +26,9 @@
 /// the LaTeX source code for more in-depth analysis. It enhances code structure, identifies
 /// special tokens, and captures error information, all contributing to a more robust and
 /// efficient parsing process.
-pub mod preprocessor;
 
 /// LaTeX Syntax Tokens
 pub mod syntax;
-
-pub mod expansion;
 
 mod lexer;
 mod parser;

@@ -7,7 +7,6 @@ authors.workspace = true
 
 [dependencies]
 collections.workspace = true
-lexer.workspace = true
 span.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

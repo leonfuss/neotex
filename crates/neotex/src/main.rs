@@ -33,9 +33,7 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if let Some(s) = args.get(1) {
         match s.as_str() {
-            "tokens" if args.get(2).is_some() => {
-                token_stream(args.get(2).unwrap())?
-            }
+            "tokens" if args.get(2).is_some() => token_stream(args.get(2).unwrap())?,
 
             s => println!("called unknown {s} or with false argument count"),
         }
@@ -49,8 +47,8 @@ fn token_stream(path: &str) -> Result<()> {
     let src = std::fs::read_to_string(path)?;
 
     println!("lexing input...");
-    let lexed = parser::preparse::LexedStr::new(&src);
-    println!("{lexed:?}");
+
+    // println!("{lexed:?}");
 
     println!("resolving macors...");
     // let store = parser::expansion::resolve(&lexed);

@@ -1,5 +1,3 @@
-use lexer::TokenKind;
-
 use self::SyntaxKind::*;
 
 /// The Kind of a Syntax Node
@@ -231,16 +229,6 @@ impl Trivia for SyntaxKind {
     #[inline(always)]
     fn is_trivia(&self) -> bool {
         matches!(self, SyntaxKind::Whitespace | SyntaxKind::Newline | SyntaxKind::Comment)
-    }
-}
-
-impl Trivia for TokenKind {
-    #[inline(always)]
-    fn is_trivia(&self) -> bool {
-        matches!(
-            self,
-            TokenKind::Whitespace | TokenKind::Newline | TokenKind::Comment | TokenKind::AComment
-        )
     }
 }
 
