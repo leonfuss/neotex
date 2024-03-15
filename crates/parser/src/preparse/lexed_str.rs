@@ -1,53 +1,31 @@
-/// This module defines a parser for processing LaTeX syntax.
-/// It converts LaTeX source code into a sequence of syntax tokens and
-/// extracts the position of LaTeX commands definitions.
-use crate::SyntaxKind;
-use crate::SyntaxKind::*;
-use crate::{preparse::converter::Converter, utils::utils::IndexedSliceView};
+use std::fmt::Display;
+use std::ops::Range;
 
 use tracing::{instrument, trace};
 
 use super::errors::PreparseError;
+use crate::expansion::expanded::{Expanded, ExpandedIter};
+use crate::preparse::converter::Converter;
+use crate::SyntaxKind;
+use crate::SyntaxKind::*;
+
+pub enum SyntaxToken<'source> {
+    Token(SyntaxKind),
+    Expansion(Box<Expanded<'source>>),
+}
 
 /// Represents the result of pre-parsing LaTeX source code (parsing-stage 1). It holds a reference to the input string,
 /// the pre-parsed syntax tokens and their corresponding byte start positions, resulting pre-parse errors,
 /// as well as definitions in the pre-parsed code and their positions in bytes.
-#[cfg_attr(feature = "integration-tests", visibility::make(pub))]
-#[derive(Debug)]
-pub(crate) struct LexedStr<'source> {
+pub struct LexedStr<'source> {
     pub(super) src: &'source str,
-    pub(super) tokens: Vec<SyntaxKind>,
+    pub(super) tokens: Vec<SyntaxToken<'source>>,
     pub(super) start: Vec<usize>,
     pub(super) errors: Vec<PreparseError>,
     pub(super) definitions: Vec<Definition>,
 }
 
 impl<'source> LexedStr<'source> {
-    /// Create a new [`LexedStr`] by pre-parsing the provided LaTeX source code string.
-    ///
-    /// # Arguments
-    ///
-    /// * `input` - The LaTeX source code string to be pre-parsed.
-    ///
-    /// # Returns
-    ///
-    /// A [`LexedStr`] containing the pre-parsed syntax tokens, error information, and definitions.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use parser::preparse::LexedStr;
-    /// let input = "\\documentclass{article} \\begin{document} Hello, World! \\end{document}";
-    /// let lexed = LexedStr::new(input);
-    ///
-    /// for token in lexed.syntax_tokens() {
-    ///     println!("{:?}", token);
-    /// }
-    /// ```
-    ///
-    /// This function takes an input LaTeX source code string and pre-parses it, generating a [`LexedStr`]
-    /// that can be used to access the pre-parsed syntax tokens, errors, and definitions.
-    #[instrument(skip(input))]
     pub fn new(input: &str) -> LexedStr {
         let buf = LexedStr {
             src: input,
@@ -65,227 +43,299 @@ impl<'source> LexedStr<'source> {
         conv.transform()
     }
 
-    /// Returns an iterator over the pre-parsed syntax tokens in the [`LexedStr`].
-    ///
-    /// This method allows you to iterate over the pre-parsed syntax tokens extracted from the
-    /// LaTeX source code. Syntax tokens represent the fundamental elements of the LaTeX code
-    /// and are categorized into various types such as keywords, identifiers, operators, and more.
-    ///
-    /// # Returns
-    ///
-    /// An iterator yielding [`SyntaxKind`] values representing the pre-parsed syntax tokens.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use parser::preparse::LexedStr;
-    /// # use parser::SyntaxKind;
-    /// let input = "\\section{Title} Some text.";
-    /// let lexed = LexedStr::new(input);
-    ///
-    /// for token in lexed.syntax_tokens() {
-    ///     match token {
-    ///         SyntaxKind::Command => println!("Found a command token."),
-    ///         SyntaxKind::Comment => println!("Found an comment token."),
-    ///         // Handle other token types as needed.
-    ///         _ => {}
-    ///     }
-    /// }
-    /// ```
-    ///
-    /// This method is useful for performing further analysis or processing of the syntax
-    /// tokens extracted from the LaTeX source code. This method ommits the last definition (EOF)
-    /// which is only inserted to make life for definition indexes a bit easier.
-    pub fn syntax_tokens(&self) -> impl Iterator<Item = &SyntaxKind> + '_ {
-        self.tokens.iter().filter(|&&it| it != Eof)
-    }
-
-    // TODO: Documetn
-    pub fn syntax_tokens_from_index(
-        &'source self,
-        idx: usize,
-    ) -> impl Iterator<Item = (usize, SyntaxKind)> + 'source {
-        self.tokens.iter().copied().enumerate().skip(idx)
-    }
-
-    /// Returns an iterator over the definitions found in the pre-parsed LaTeX source.
-    ///
-    /// During preparsing the \newcommand and \newenvironment macros are identified and picked out
-    /// analysed for their argument count. This should reduce later modifications in the AST tree
-    /// due to changes in the argument size.
-    ///
-    /// # Returns
-    ///
-    /// An iterator yielding references to [`Definition`] structs representing recognized LaTeX definitions.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use parser::preparse::LexedStr;
-    /// # use parser::preparse::DefinitionKind;
-    /// let input = "\\newcommand{\\mycommand}[1]{...}";
-    /// let lexed = LexedStr::new(input);
-    ///
-    /// for def in lexed.definitions() {
-    ///     match def.kind {
-    ///         DefinitionKind::Def => println!("Found a LaTeX \\def command."),
-    ///         DefinitionKind::Input => println!("Found a LaTeX \\input command."),
-    ///         DefinitionKind::Package => println!("Found a LaTeX \\usepackage command."),
-    ///         DefinitionKind::Environment => println!("Found a LaTeX \\newenvironment command."),
-    ///         DefinitionKind::Command => println!("Found a LaTeX \\newcommand definition."),
-    ///         // Handle other definition types as needed.
-    ///         _ => {}
-    ///     }
-    /// }
-    /// ```
-    ///
-    /// This method plays a crucial role in enabling subsequent parsing steps to efficiently
-    /// process LaTeX source code by providing information about recognized commands and their
-    /// positions.
     pub fn definitions(&self) -> impl Iterator<Item = &Definition> + '_ {
         self.definitions.iter()
     }
 
-    /// Returns an iterator over pre-parse errors encountered during pre-parsing.
-    ///
-    /// Pre-parse errors represent issues or inconsistencies found in the LaTeX source code
-    /// during the pre-parsing phase. These errors are essential for identifying problems
-    /// early in the processing pipeline.
-    ///
-    /// # Returns
-    ///
-    /// An iterator yielding references to [`PreparseError`] structs representing pre-parse errors.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// // the postfix '_' is not a valid command name
-    /// # use parser::preparse::LexedStr;
-    /// # use parser::preparse::PreparseErrorKind;
-    /// let input = "\\invalid_command_{...}";
-    /// let lexed = LexedStr::new(input);
-    ///
-    /// for error in lexed.errors() {
-    ///     match error.kind {
-    ///         PreparseErrorKind::CommandOrFunctionNameMissing => println!("Command name is missing."),
-    ///         PreparseErrorKind::InvalidCommandOrFunctionName => println!("Invalid command name."),
-    ///         PreparseErrorKind::InvalidCommandOrFunctionNameEnding => println!("Invalid command name ending."),
-    ///         // Handle other error types as needed.
-    ///         _ => {}
-    ///     }
-    /// }
-    /// ```
     pub fn errors(&self) -> impl Iterator<Item = &PreparseError> + '_ {
         self.errors.iter()
     }
+
+    // Returns the source string of a specified token range. This does ignore expanded tokens and
+    // returns none if the range is not valid.
+    pub fn text(&self, r: impl IndexRange<usize>) -> Option<&str> {
+        let range = r.as_range();
+        let len = self.tokens.len() - 1;
+        if !(range.end <= len && range.start <= len) {
+            return None;
+        }
+
+        let start = self.start[range.start];
+        let end = self.start[range.end];
+        Some(&self.src[start..end])
+    }
+
+    pub fn iter(&'source self) -> LexerIter<'source> {
+        self.iter_from(0)
+    }
+
+    pub fn iter_from(&'source self, idx: usize) -> LexerIter<'source> {
+        LexerIter::from_base(&self, idx, false)
+    }
 }
 
-/// Represents the different types of LaTeX definitions.
-///
-/// The `DefinitionKind` enum categorizes LaTeX definitions into distinct types, including
-/// package input, includes, imports, new command definitions, new environment definitions,
-/// and LaTeX `\def` commands.
-///
-/// This categorization allows for easy identification and processing of different types of
-/// LaTeX constructs within the pre-parsed source code.
-#[cfg_attr(feature = "integration-tests", visibility::make(pub))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum DefinitionKind {
-    /// Represents  LaTeX `\newcommand`.
+    /// `\newcommand`.
     Macro,
-    /// Represents LaTeX `\def`.
+    /// `\def`.
     Def,
-    /// Represents LaTeX `\newenvironment`.
+    /// `\newenvironment`.
     Environment,
 }
 
-/// Represents a LaTeX definition found in the pre-parsed source code.
-///
-/// A [`Definition`] encapsulates information about a recognized LaTeX definition, including
-/// its type and its index position in the token vector
-///
-/// # Fields
-///
-/// - `kind`: The type or category of the LaTeX definition, represented by a [`DefinitionKind`].
-///
-/// - `idx`: The index of the definition within the pre-parsed source code token vector.
-///          See [`LexedStr`] for more
-///
-/// # Examples
-///
-/// ```rust
-/// # use parser::preparse::LexedStr;
-/// # let input = "asdfasdf";
-/// let lexed = LexedStr::new(input);
-///
-/// for def in lexed.definitions(){
-///    match def {
-///       // do something with the definitions
-///       _ => {}
-///    }
-/// }
-/// ```
-#[cfg_attr(feature = "integration-tests", visibility::make(pub))]
+impl std::fmt::Display for DefinitionKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DefinitionKind::Macro => write!(f, "Macro"),
+            DefinitionKind::Def => write!(f, "Def"),
+            DefinitionKind::Environment => write!(f, "Environment"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct Definition {
-    /// The type or category of the LaTeX definition.
     pub kind: DefinitionKind,
-    /// The index of the definition within the pre-parsed source code tokens.
+    /// Index in LexedStr of the definition in the pre-parsed source code tokens.
     pub idx: usize,
 }
 
 impl Definition {
-    /// Creates a new [`Definition`] instance with the specified kind and index.
-    ///
-    /// # Parameters
-    ///
-    /// - `kind`: The type or category of the LaTeX definition, represented by a [`DefinitionKind`].
-    ///
-    /// - `idx`: The position or index of the definition within the pre-parsed source code tokens
-    ///          of [`LexedStr`].
-    ///
-    /// # Returns
-    ///
-    /// A [`Definition`] instance with the provided kind and index.
-    ///
     pub fn new(kind: DefinitionKind, idx: usize) -> Definition {
         Definition { kind, idx }
     }
 }
 
-impl<'source> IndexedSliceView<'source> for LexedStr<'source> {
-    #[inline]
-    fn as_str(&self) -> &'source str {
-        self.src
+impl std::fmt::Debug for LexedStr<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LexedStr")
+            .field("errors", &self.errors)
+            .field("definitions", &self.definitions)
+            .finish()?;
+        writeln!(f, "\nlexed TokenStream: ")?;
+        for (idx, token) in self.tokens.iter().enumerate() {
+            let SyntaxToken::Token(kind) = token else {
+                continue;
+            };
+
+            match self.text(idx) {
+                Some(_)
+                    if matches!(
+                        kind,
+                        SyntaxKind::Break | SyntaxKind::Newline | Whitespace
+                    ) =>
+                {
+                    writeln!(f, "{idx:?}. \" \" {kind:?}")?
+                }
+                Some(src) => writeln!(f, "{idx:?}. \"{src}\" {kind:?}")?,
+                None if *kind == SyntaxKind::Eof => {
+                    writeln!(f, "{idx:?}. \"\"  EOF")?
+                }
+                _ => writeln!(
+                    f,
+                    "!! Token {:?} at index {} not found",
+                    kind, idx
+                )?,
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct LexerIter<'source> {
+    index: Option<usize>,
+    base: &'source LexedStr<'source>,
+    inner: Option<ExpandedIter<'source>>,
+    include_expansion: bool,
+}
+
+impl<'source> LexerIter<'source> {
+    fn from_base(
+        base: &'source LexedStr,
+        index: usize,
+        include_expansion: bool,
+    ) -> LexerIter<'source> {
+        LexerIter { base, index: Some(index), inner: None, include_expansion }
     }
 
-    #[inline]
-    fn start_of_index(&self, idx: usize) -> usize {
-        *self.start.get(idx).or_else(|| self.start.last()).unwrap()
+    /// Panics if called after the iterator is exhausted.
+    pub(crate) fn index(&self) -> usize {
+        self.index.expect("Called index() on exhausted iterator")
     }
 
-    /// Returns the number of pre-parsed syntax tokens in the `LexedStr`.
-    ///
-    /// This method provides the count of pre-parsed syntax tokens extracted from the LaTeX
-    /// source code. It can be used to determine the size or length of the pre-parsed code.
-    ///
-    /// # Returns
-    ///
-    /// The number of pre-parsed syntax tokens.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use parser::preparse::LexedStr;
-    ///
-    /// let input = "\\section{Title} Some text.";
-    /// let lexed = LexedStr::new(input);
-    ///
-    /// let token_count = lexed.len();
-    /// println!("Number of tokens: {}", token_count);
-    /// ```
-    #[inline]
-    fn len(&self) -> usize {
-        self.tokens.len()
+    pub(crate) fn text(
+        &self,
+        index: impl IndexRange<usize>,
+    ) -> Option<&'source str> {
+        let idx = index.as_range();
+        let text = self.base.text(index);
+        println!("getting text: {:?} with index: {idx:?}", text);
+        text
+    }
+
+    pub(crate) fn current_text(&self) -> Option<&'source str> {
+        self.text(self.index? + 1)
+    }
+
+    pub(crate) fn advance_while(
+        &mut self,
+        mut predicate: impl FnMut(SyntaxKind) -> bool,
+    ) {
+        while let Some(token) = self.peek() {
+            if !predicate(token) {
+                return;
+            }
+            self.next();
+        }
+    }
+
+    pub(crate) fn peek(&self) -> Option<SyntaxKind> {
+        self.peek_nth(1)
+    }
+
+    pub(crate) fn peek_nth(&self, n: usize) -> Option<SyntaxKind> {
+        if !self.include_expansion {
+            let index = self.index? + n;
+            let token = match self.base.tokens.get(index)? {
+                SyntaxToken::Token(t) => *t,
+                SyntaxToken::Expansion(e) => *e.original(),
+            };
+            return Some(token);
+        }
+
+        let mut index = self.index?;
+        let end = self.index? + n;
+        while index <= end {
+            if let Some(e) = &self.inner {
+                let l = e.len();
+                if l + index <= end {
+                    return e.peek_nth(n).copied();
+                }
+            }
+
+            match self.base.tokens.get(index)? {
+                SyntaxToken::Token(t) => {
+                    if index == end {
+                        return Some(*t);
+                    } else {
+                        index += 1;
+                    }
+                }
+                SyntaxToken::Expansion(e) => {
+                    let l = e.len();
+                    if l + index <= end {
+                        let idx = end - index;
+                        return e.iter().peek_nth(idx).copied();
+                    }
+                    index += l;
+                }
+            }
+        }
+        None
+    }
+}
+
+impl<'source> Iterator for LexerIter<'source> {
+    type Item = &'source SyntaxKind;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index.is_none() {
+            return None;
+        }
+
+        if !self.include_expansion {
+            let token = match self.base.tokens.get(self.index?)? {
+                SyntaxToken::Token(Eof) => {
+                    self.index = None;
+                    return None;
+                }
+                SyntaxToken::Token(t) => t,
+                SyntaxToken::Expansion(exp) => exp.original(),
+            };
+            self.index = self.index.map(|i| i + 1);
+            return Some(token);
+        }
+
+        loop {
+            let token = match self.inner {
+                Some(ref mut t) => t.next(),
+                None => None,
+            };
+
+            if token.is_some() {
+                return token;
+            }
+
+            self.inner = None;
+            match self.base.tokens.get(self.index?)? {
+                SyntaxToken::Token(Eof) => {
+                    self.index = None;
+                    return None;
+                }
+                SyntaxToken::Token(t) => {
+                    // increase index by one if index is some
+                    self.index = self.index.map(|i| i + 1);
+                    return Some(t);
+                }
+                SyntaxToken::Expansion(e) => {
+                    self.inner = Some(e.iter());
+                    self.index = self.index.map(|i| i + 1);
+                }
+            }
+        }
+    }
+}
+
+pub trait IndexRange<I>: Clone {
+    fn as_range(&self) -> Range<I>;
+}
+
+impl IndexRange<usize> for usize {
+    fn as_range(&self) -> Range<usize> {
+        *self..(*self + 1)
+    }
+}
+impl IndexRange<usize> for Range<usize> {
+    fn as_range(&self) -> Range<usize> {
+        self.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn iter_index() {
+        let src = "\\newcommand{ \\name }{\nasdfasdf}";
+        let lexed = LexedStr::new(src);
+        let mut iter = lexed.iter();
+
+        assert_eq!(iter.index(), 0);
+        iter.next();
+        assert_eq!(iter.index(), 1);
+        iter.peek();
+        assert_eq!(iter.index(), 1)
+    }
+    #[test]
+    fn test_peek_nth() {
+        let src = "\\newcommand{ \\name }{\nasdfasdf}";
+        let lexed = LexedStr::new(src);
+        let iter = LexerIter::from_base(&lexed, 0, false);
+
+        assert_eq!(iter.peek_nth(0), Some(SyntaxKind::NewCommand));
+        assert_eq!(iter.peek_nth(1), Some(SyntaxKind::OpenBrace));
+        assert_eq!(iter.peek_nth(2), Some(SyntaxKind::Whitespace));
+        assert_eq!(iter.peek_nth(3), Some(SyntaxKind::Command));
+        assert_eq!(iter.peek_nth(4), Some(SyntaxKind::Whitespace));
+        assert_eq!(iter.peek_nth(5), Some(SyntaxKind::CloseBrace));
+        assert_eq!(iter.peek_nth(6), Some(SyntaxKind::OpenBrace));
+        assert_eq!(iter.peek_nth(7), Some(SyntaxKind::Newline));
+        assert_eq!(iter.peek_nth(8), Some(SyntaxKind::AWord));
+        assert_eq!(iter.peek_nth(9), Some(SyntaxKind::CloseBrace));
+        assert_eq!(iter.peek_nth(10), Some(SyntaxKind::Eof));
+        assert_eq!(iter.peek_nth(11), None);
     }
 }

@@ -4,19 +4,20 @@ use std::ops::Range;
 use lexer::Token;
 use lexer::TokenKind;
 
+use super::errors::PreparseError;
+use super::errors::PreparseErrorKind;
+use super::lexed_str::DefinitionKind;
+use super::lexed_str::LexedStr;
+use super::lexed_str::SyntaxToken;
 use crate::utils::peek::DualPeekIterator;
 use crate::utils::peek::Iterutils;
 use crate::SyntaxKind;
 use crate::SyntaxKind::*;
 
-use super::errors::PreparseError;
-use super::errors::PreparseErrorKind;
-use super::lexed_str::DefinitionKind;
-use super::lexed_str::LexedStr;
-
 pub(super) struct Converter<'source, I>
 where
     I: Iterator,
+    I::Item: std::fmt::Debug,
 {
     iter: DualPeekIterator<I>,
     pub lexed: LexedStr<'source>,
@@ -35,7 +36,10 @@ impl<'source, I> Converter<'source, I>
 where
     I: Iterator<Item = Token>,
 {
-    pub(crate) fn new(lexed: LexedStr<'source>, tokens: I) -> Converter<'source, I> {
+    pub(crate) fn new(
+        lexed: LexedStr<'source>,
+        tokens: I,
+    ) -> Converter<'source, I> {
         Converter {
             lexed,
             iter: tokens.peek_two(),
@@ -103,13 +107,6 @@ where
         }
     }
 
-    pub(super) fn expect(&mut self, kind: TokenKind, err: PreparseErrorKind) {
-        if self.eat(kind) {
-            return;
-        }
-        self.add_error(err);
-    }
-
     pub(super) fn advance_with_token(&mut self, token: SyntaxKind) {
         self.advance();
         self.add_token(token);
@@ -136,10 +133,19 @@ where
 
         let kind = match slice {
             "\\def" => return self.add_definition(Def, DefinitionKind::Def),
-            "\\newcommand" => return self.add_definition(NewCommand, DefinitionKind::Macro),
-            "\\newenvironment" => return self.add_definition(NewEnv, DefinitionKind::Environment),
+            "\\newcommand" => {
+                return self.add_definition(NewCommand, DefinitionKind::Macro);
+            }
+            "\\newenvironment" => {
+                return self
+                    .add_definition(NewEnv, DefinitionKind::Environment);
+            }
             "\\input" => Input,
             "\\usepackage" => UsePackage,
+            "\\use" => Use,
+            "\\fn" => FunctionIdent,
+            "\\pub" => Pub,
+            "\\let" => Let,
             _ => Command,
         };
 
@@ -154,7 +160,7 @@ where
 
 impl LexedStr<'_> {
     fn add_token(&mut self, token: SyntaxKind, start: usize) {
-        self.tokens.push(token);
+        self.tokens.push(SyntaxToken::Token(token));
         self.start.push(start);
     }
 
@@ -164,7 +170,12 @@ impl LexedStr<'_> {
         self.errors.push(err)
     }
 
-    fn add_definition(&mut self, token: SyntaxKind, def_kind: DefinitionKind, start: usize) {
+    fn add_definition(
+        &mut self,
+        token: SyntaxKind,
+        def_kind: DefinitionKind,
+        start: usize,
+    ) {
         self.add_token(token, start);
         let def = super::lexed_str::Definition::new(def_kind, self.last_idx());
         self.definitions.push(def);

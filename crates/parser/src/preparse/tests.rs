@@ -1,4 +1,8 @@
-use crate::{preparse::LexedStr, syntax::SyntaxKind, SyntaxKind::*};
+use crate::{
+    preparse::LexedStr,
+    syntax::SyntaxKind,
+    SyntaxKind::*,
+};
 
 #[test]
 fn index_correction() {
@@ -104,11 +108,16 @@ fn path_seperator_function() {
     check(input, &expected, 0, 0);
 }
 
-fn check(input: &str, expected: &[SyntaxKind], num_errors: u8, num_definitions: u8) {
+fn check(
+    input: &str,
+    expected: &[SyntaxKind],
+    num_errors: u8,
+    num_definitions: u8,
+) {
     let lexed = LexedStr::new(input);
     println!("{:?}", lexed);
     let expected = expected.to_vec();
-    let found: Vec<SyntaxKind> = lexed.syntax_tokens().copied().collect();
+    let found: Vec<SyntaxKind> = lexed.iter().cloned().collect();
 
     let found_num_errors = lexed.errors().count();
     let found_num_definitions = lexed.definitions().count();
