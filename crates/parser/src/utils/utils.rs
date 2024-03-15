@@ -1,21 +1,25 @@
-use std::ops::Range;
+use std::ops::{Deref, Range};
 
-pub trait IndexedSliceView<'source> {
-    fn as_str(&self) -> &'source str;
-
-    fn start_of_index(&self, idx: usize) -> usize;
-
-    fn len(&self) -> usize;
-
-    fn range_from_index(&self, idx: usize) -> Range<usize> {
-        let low = self.start_of_index(idx);
-        let high = self.start_of_index(idx + 1);
-        low..high
+pub(crate) struct Lock();
+impl Lock {
+    // unsafe to restrict ussage
+    pub(crate) unsafe fn new() -> Lock {
+        Lock()
     }
+}
 
-    fn slice_at_index(&self, idx: usize) -> &'source str {
-        let range = self.range_from_index(idx);
-        &self.as_str()[range]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) struct Marker(usize);
+impl Marker {
+    pub fn new(idx: usize, _lock: Lock) -> Marker {
+        Marker(idx)
+    }
+}
+
+impl Deref for Marker {
+    type Target = usize;
+    fn deref(&self) -> &usize {
+        &self.0
     }
 }
 
