@@ -14,9 +14,14 @@
 //! * [lexer](../lexer/index.html)
 //! * [parser](../parser/index.html)
 
+use std::{error::Error, path::PathBuf};
+
 extern crate tracing;
 
-fn main() {
+// TODO: Remove and use better error handling
+type Result<R> = std::result::Result<R, Box<dyn Error>>;
+
+fn main() -> Result<()> {
     // setup tracing
     tracing_subscriber::fmt()
         .pretty()
@@ -24,4 +29,33 @@ fn main() {
         .with_max_level(tracing::Level::ERROR)
         // sets this to be the default, global collector for this application.
         .init();
+
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(s) = args.get(1) {
+        match s.as_str() {
+            "tokens" if args.get(2).is_some() => {
+                token_stream(args.get(2).unwrap())?
+            }
+
+            s => println!("called unknown {s} or with false argument count"),
+        }
+    }
+    Ok(())
+}
+
+fn token_stream(path: &str) -> Result<()> {
+    let path = PathBuf::from(path);
+    println!("reading {path:?}...",);
+    let src = std::fs::read_to_string(path)?;
+
+    println!("lexing input...");
+    let lexed = parser::preparse::LexedStr::new(&src);
+    println!("{lexed:?}");
+
+    println!("resolving macors...");
+    // let store = parser::expansion::resolve(&lexed);
+
+    // println!("{store:?}");
+
+    Ok(())
 }

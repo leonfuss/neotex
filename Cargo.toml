@@ -14,11 +14,9 @@ lto = true
 
 [workspace.dependencies]
 # local crates
-lexer = { path = "./crates/lexer", version = "0.0.0" }
 parser = { path = "./crates/parser", version = "0.0.0" }
+span = { path = "./crates/span", version = "0.0.0" }
+collections = { path = "./crates/collections", version = "0.0.0" }
 
 tracing = "0.1"
-
-# change visibility of structs / functions / etc. for doc-tests
-visibility = "0.1.0"
-
+tracing-subscriber = "0.3"
