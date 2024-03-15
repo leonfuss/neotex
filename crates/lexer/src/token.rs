@@ -67,7 +67,9 @@ pub enum TokenKind {
     /// Represents the underscore symbol ('_').
     Underscore,
     /// Represents the apostrophe symbol ("'").
-    Apostrophe,
+    SingleApostrophe,
+    /// Represents the double apostrophe symbol ('"').
+    DoubleApostrophe,
     /// Represents the slash symbol ('/').
     Slash,
     /// Represents the tilde symbol ('~').
@@ -229,7 +231,8 @@ impl Cursor<'_> {
             '+' => Plus,
             '|' => Pipe,
             '^' => Carret,
-            '\'' => Apostrophe,
+            '\'' => SingleApostrophe,
+            '"' => DoubleApostrophe,
             '_' => Underscore,
             '/' => Slash,
             '@' => At,

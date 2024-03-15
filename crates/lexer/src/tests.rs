@@ -2,7 +2,10 @@ use std::fmt::Debug;
 
 use crate::token::{
     tokenize,
-    TokenKind::{self, *},
+    TokenKind::{
+        self,
+        *,
+    },
 };
 
 #[test]
@@ -50,7 +53,8 @@ fn multi_newline() {
 fn comment() {
     let input = "asdf 98    % asdfl#ü124<ääp\n % kllk \r\n%";
     let expected = vec![
-        AWord, Whitespace, Number, Whitespace, Comment, Whitespace, Comment, Comment,
+        AWord, Whitespace, Number, Whitespace, Comment, Whitespace, Comment,
+        Comment,
     ];
     check(input, &expected);
 }

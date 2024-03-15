@@ -27,14 +27,10 @@ impl<'a> Cursor<'a> {
     /// let cursor = Cursor::new(latex_code);
     /// ```
     pub fn new(input: &'a str) -> Cursor<'a> {
-        let mut graphemes = finl_unicode::grapheme_clusters::Graphemes::new(input);
+        let mut graphemes =
+            finl_unicode::grapheme_clusters::Graphemes::new(input);
         let next_cluster = graphemes.next();
-        Cursor {
-            token_len: 0,
-            graphemes,
-            next_cluster,
-            buf: Vec::new(),
-        }
+        Cursor { token_len: 0, graphemes, next_cluster, buf: Vec::new() }
     }
 
     /// Peeks the next symbol from the input stream without consuming it.
@@ -74,7 +70,10 @@ impl<'a> Cursor<'a> {
     }
 
     /// Eats grapheme cluster while predicate returns true or until the end of file is reached.
-    pub(crate) fn eat_while(&mut self, mut predicate: impl FnMut(&[char]) -> bool) {
+    pub(crate) fn eat_while(
+        &mut self,
+        mut predicate: impl FnMut(&[char]) -> bool,
+    ) {
         let mut buf: Vec<char>;
 
         while self.first().is_some() {
