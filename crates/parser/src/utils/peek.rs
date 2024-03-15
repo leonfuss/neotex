@@ -12,20 +12,21 @@ where
 pub fn peek_two<I>(mut iter: I) -> DualPeekIterator<I>
 where
     I: Iterator,
+    I::Item: Debug,
 {
     let first = iter.next();
     let second = iter.next();
-    DualPeekIterator {
-        iter,
-        first,
-        second,
-    }
+    DualPeekIterator { iter, first, second }
 }
 
 impl<I> DualPeekIterator<I>
 where
     I: Iterator,
 {
+    pub fn base_iter(&self) -> &I {
+        &self.iter
+    }
+
     pub fn peek_first(&self) -> Option<&I::Item> {
         self.first.as_ref()
     }
@@ -42,10 +43,10 @@ where
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let ret = std::mem::take(&mut self.first);
-        self.first = std::mem::take(&mut self.second);
+        let first = self.first.take();
+        self.first = self.second.take();
         self.second = self.iter.next();
-        ret
+        first
     }
 }
 
@@ -66,6 +67,7 @@ pub trait Iterutils: Iterator {
     fn peek_two(self) -> DualPeekIterator<Self>
     where
         Self: Sized,
+        Self::Item: Debug,
     {
         peek_two(self)
     }

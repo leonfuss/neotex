@@ -1,5 +1,6 @@
-use self::SyntaxKind::*;
 use lexer::TokenKind;
+
+use self::SyntaxKind::*;
 
 /// The Kind of a Syntax Node
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -33,6 +34,10 @@ pub enum SyntaxKind {
     AWord,
     /// Number token (e.g., '123')
     Number,
+    /// Float token (eg. '.123', '12.123')
+    Float,
+    /// String (eg. "....")
+    String,
 
     // Delimiter tokens
     /// Open brace token (e.g., '{')
@@ -68,7 +73,9 @@ pub enum SyntaxKind {
     /// Underscore token (e.g., '_')
     Underscore,
     /// Apostrophe token (e.g., '\'')
-    Apostrophe,
+    SingleApostrophe,
+    /// double Apostrophe token (e.g., '"')
+    DoubleApostrophe,
     /// Slash token (e.g., '/')
     Slash,
     /// Tilde token (e.g., '~')
@@ -104,6 +111,12 @@ pub enum SyntaxKind {
     /// Right arrow token (e.g., '->')
     RightArrow, // ->
 
+    /// macro expansion token (eg. #name_9_)
+    ComplexMacroExpansionToken,
+    /// macro expansion token only single number(eg. #1,)
+    SimpleMacroExpansionToken,
+    /// Raw delimiter Token (eg. '#>>')
+    RawDelimiter,
     // Math delimiter token
     /// Math delimiter token (e.g., '$')
     MathDelimiter, // $
@@ -136,9 +149,13 @@ pub enum SyntaxKind {
     /// module path seperator
     PathSeperator, // '::' in function and variable calls
     /// Function declaration
-    FunctionIdentifier, // \fn
+    FunctionIdent, // \fn
     /// Module Declaration
     Module, // \mod
+    /// Visibility statement
+    Pub, // \pub (super) or \pub
+    /// Variable declaration
+    Let,
     /// Variable declaration
     Variable, // \@<name> only with underscore and ASCII-Word
     /// usage decleration. eg. \use ::sdaf::asdfa
@@ -175,7 +192,7 @@ pub enum SyntaxKind {
 }
 
 impl SyntaxKind {
-    pub fn is_preprocess_trivia(&self) -> bool {
+    pub fn is_resolver_trivia(&self) -> bool {
         matches!(
             self,
             SyntaxKind::Whitespace
@@ -193,7 +210,7 @@ impl SyntaxKind {
                 | Function
                 | Namespace
                 | PathSeperator
-                | FunctionIdentifier
+                | FunctionIdent
                 | Module
                 | Variable
                 | Use
@@ -213,10 +230,7 @@ pub(crate) trait Trivia {
 impl Trivia for SyntaxKind {
     #[inline(always)]
     fn is_trivia(&self) -> bool {
-        matches!(
-            self,
-            SyntaxKind::Whitespace | SyntaxKind::Newline | SyntaxKind::Comment
-        )
+        matches!(self, SyntaxKind::Whitespace | SyntaxKind::Newline | SyntaxKind::Comment)
     }
 }
 
@@ -227,5 +241,11 @@ impl Trivia for TokenKind {
             self,
             TokenKind::Whitespace | TokenKind::Newline | TokenKind::Comment | TokenKind::AComment
         )
+    }
+}
+
+impl std::fmt::Display for SyntaxKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", format!("{self:?}"))
     }
 }

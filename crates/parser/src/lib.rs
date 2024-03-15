@@ -7,7 +7,6 @@
 #![warn(missing_docs)]
 
 //! **Part of [NeoTeX](../neotex/index.html)**
-
 /// The `preparse` module serves as the initial step in the parsing pipeline for LaTeX source code.
 ///
 /// Its primary purpose is to perform a preliminary analysis and conversion of Lexer tokens into a
@@ -27,17 +26,15 @@
 /// the LaTeX source code for more in-depth analysis. It enhances code structure, identifies
 /// special tokens, and captures error information, all contributing to a more robust and
 /// efficient parsing process.
-pub mod preparse;
-
 pub mod preprocessor;
 
 /// LaTeX Syntax Tokens
 pub mod syntax;
 
+pub mod expansion;
+
+mod lexer;
 mod parser;
 mod utils;
 
 pub use syntax::SyntaxKind;
-
-#[cfg(test)]
-mod tests;
